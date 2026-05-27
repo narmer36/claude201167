@@ -234,16 +234,28 @@ function tryMove(entity, dir, speed, allowDoor=false) {
 }
 
 function atTileCenter(entity) {
-  return (entity.px % TILE) === 0 && (entity.py % TILE) === 0;
+  const tol = Math.max(entity.speed || 1.5, 0.5) + 0.01;
+  const rx = Math.abs(entity.px - Math.round(entity.px / TILE) * TILE);
+  const ry = Math.abs(entity.py - Math.round(entity.py / TILE) * TILE);
+  return rx <= tol && ry <= tol;
 }
 
+const OPPOSITE = { left:'right', right:'left', up:'down', down:'up' };
+
 function updatePac() {
-  // Если по центру тайла — можем сменить направление
-  if (atTileCenter(pac)) {
+  // Разворот можно делать в любой момент
+  if (pac.nextDir !== pac.dir && pac.nextDir === OPPOSITE[pac.dir]) {
+    pac.dir = pac.nextDir;
+  } else if (pac.nextDir !== pac.dir && atTileCenter(pac)) {
+    // Перпендикулярный поворот — только в районе центра тайла, с привязкой
+    const tx = Math.round(pac.px / TILE);
+    const ty = Math.round(pac.py / TILE);
     const d = DIRS[pac.nextDir];
-    const nx = pac.x + d.x;
-    const ny = pac.y + d.y;
-    if (!isWall(nx, ny)) {
+    if (!isWall(tx + d.x, ty + d.y)) {
+      pac.px = tx * TILE;
+      pac.py = ty * TILE;
+      pac.x = tx;
+      pac.y = ty;
       pac.dir = pac.nextDir;
     }
   }
@@ -273,37 +285,45 @@ function ghostAI(g) {
   if (g.startDelay > 0) { g.startDelay--; return; }
 
   if (atTileCenter(g)) {
-    // На перекрёстке — выбрать направление
-    const choices = [];
-    const opposite = { left:'right', right:'left', up:'down', down:'up' }[g.dir];
-    for (const dir of ['up','left','down','right']) {
-      if (dir === opposite) continue;
-      const d = DIRS[dir];
-      const nx = g.x + d.x;
-      const ny = g.y + d.y;
-      const allowDoor = g.eaten;
-      if (!isWall(nx, ny, allowDoor)) choices.push(dir);
-    }
-    if (choices.length === 0) {
-      // развернуться
-      choices.push(opposite);
-    }
-    // Цель: за пакманом, при frightened — случайное, при eaten — домой
-    let target;
-    if (g.eaten) target = g.home;
-    else if (g.frightened) target = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) };
-    else target = { x: pac.x, y: pac.y };
+    const tx = Math.round(g.px / TILE);
+    const ty = Math.round(g.py / TILE);
+    // Решение только при заходе на новый тайл
+    if (g.lastTX !== tx || g.lastTY !== ty) {
+      g.lastTX = tx;
+      g.lastTY = ty;
+      g.px = tx * TILE;
+      g.py = ty * TILE;
+      g.x = tx;
+      g.y = ty;
 
-    let best = choices[0];
-    let bestDist = Infinity;
-    for (const dir of choices) {
-      const d = DIRS[dir];
-      const nx = g.x + d.x;
-      const ny = g.y + d.y;
-      const dist = (nx-target.x)*(nx-target.x) + (ny-target.y)*(ny-target.y);
-      if (dist < bestDist) { bestDist = dist; best = dir; }
+      const choices = [];
+      const opposite = OPPOSITE[g.dir];
+      for (const dir of ['up','left','down','right']) {
+        if (dir === opposite) continue;
+        const d = DIRS[dir];
+        const nx = tx + d.x;
+        const ny = ty + d.y;
+        const allowDoor = g.eaten || isInHouse(g);
+        if (!isWall(nx, ny, allowDoor)) choices.push(dir);
+      }
+      if (choices.length === 0) choices.push(opposite);
+
+      let target;
+      if (g.eaten) target = g.home;
+      else if (g.frightened) target = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) };
+      else target = { x: pac.x, y: pac.y };
+
+      let best = choices[0];
+      let bestDist = Infinity;
+      for (const dir of choices) {
+        const d = DIRS[dir];
+        const nx = tx + d.x;
+        const ny = ty + d.y;
+        const dist = (nx-target.x)*(nx-target.x) + (ny-target.y)*(ny-target.y);
+        if (dist < bestDist) { bestDist = dist; best = dir; }
+      }
+      g.dir = best;
     }
-    g.dir = best;
   }
 
   let speed = g.speed;
