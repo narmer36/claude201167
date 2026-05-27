@@ -4,24 +4,27 @@
 <meta charset="UTF-8">
 <title>Pac-Man</title>
 <style>
+  html, body { margin: 0; padding: 0; background: #000; color: #fff; }
   body {
-    background: #000;
-    color: #fff;
     font-family: sans-serif;
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-top: 20px;
+    padding: 20px 0;
+    min-height: 100vh;
+    box-sizing: border-box;
+  }
+  h1 { color: #ff0; margin: 5px 0; }
+  #hud {
+    margin: 10px 0;
+    font-size: 18px;
+    display: flex;
+    gap: 40px;
   }
   canvas {
     background: #000;
     border: 2px solid #1e3a8a;
-  }
-  #hud {
-    margin: 10px;
-    font-size: 18px;
-    display: flex;
-    gap: 30px;
+    display: block;
   }
   #info {
     margin-top: 10px;
@@ -37,439 +40,411 @@
 </style>
 </head>
 <body>
-  <h1 style="color:#ff0;margin:5px">PAC-MAN</h1>
+  <h1>PAC-MAN</h1>
   <div id="hud">
-    <div>Очки: <span id="score">0</span></div>
-    <div>Жизни: <span id="lives">3</span></div>
+    <span>Очки: <span id="score">0</span></span>
+    <span>Жизни: <span id="lives">20</span></span>
   </div>
   <canvas id="game" width="448" height="496"></canvas>
   <div id="message"></div>
-  <div id="info">Стрелки — движение</div>
+  <div id="info">Стрелки — движение, R — заново</div>
 
 <script>
-const TILE = 16;
-const COLS = 28;
-const ROWS = 31;
+(function() {
+  'use strict';
 
-// Карта:
-// # стена, . точка, o энергайзер, P старт пакмана, G старт призрака, - пустота, = дверь в дом призраков
-const MAP = [
-  "############################",
-  "#............##............#",
-  "#.####.#####.##.#####.####.#",
-  "#o####.#####.##.#####.####o#",
-  "#.####.#####.##.#####.####.#",
-  "#..........................#",
-  "#.####.##.########.##.####.#",
-  "#.####.##.########.##.####.#",
-  "#......##....##....##......#",
-  "######.##### ## #####.######",
-  "######.##### ## #####.######",
-  "######.##          ##.######",
-  "######.## ###==### ##.######",
-  "######.## #GG  GG# ##.######",
-  "      .   #GG  GG#   .      ",
-  "######.## ######## ##.######",
-  "######.##          ##.######",
-  "######.## ######## ##.######",
-  "######.## ######## ##.######",
-  "#............##............#",
-  "#.####.#####.##.#####.####.#",
-  "#.####.#####.##.#####.####.#",
-  "#o..##.......P........##..o#",
-  "###.##.##.########.##.##.###",
-  "###.##.##.########.##.##.###",
-  "#......##....##....##......#",
-  "#.##########.##.##########.#",
-  "#.##########.##.##########.#",
-  "#..........................#",
-  "############################",
-  "                            ",
-];
+  const TILE = 16;
+  const COLS = 28;
+  const ROWS = 31;
+  const START_LIVES = 20;
 
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
-const scoreEl = document.getElementById('score');
-const livesEl = document.getElementById('lives');
-const messageEl = document.getElementById('message');
+  // # стена, . точка, o энергайзер, P старт пакмана, G старт призрака, = дверь
+  const MAP = [
+    "############################",
+    "#............##............#",
+    "#.####.#####.##.#####.####.#",
+    "#o####.#####.##.#####.####o#",
+    "#.####.#####.##.#####.####.#",
+    "#..........................#",
+    "#.####.##.########.##.####.#",
+    "#.####.##.########.##.####.#",
+    "#......##....##....##......#",
+    "######.##### ## #####.######",
+    "######.##### ## #####.######",
+    "######.##          ##.######",
+    "######.## ###==### ##.######",
+    "######.## #GG  GG# ##.######",
+    "      .   #GG  GG#   .      ",
+    "######.## ######## ##.######",
+    "######.##          ##.######",
+    "######.## ######## ##.######",
+    "######.## ######## ##.######",
+    "#............##............#",
+    "#.####.#####.##.#####.####.#",
+    "#.####.#####.##.#####.####.#",
+    "#o..##.......P........##..o#",
+    "###.##.##.########.##.##.###",
+    "###.##.##.########.##.##.###",
+    "#......##....##....##......#",
+    "#.##########.##.##########.#",
+    "#.##########.##.##########.#",
+    "#..........................#",
+    "############################",
+    "                            ",
+  ];
 
-// Создаём сетку
-let grid = [];
-let pacStart = {x: 13, y: 22};
-let ghostStarts = [];
-let totalDots = 0;
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const livesEl = document.getElementById('lives');
+  const messageEl = document.getElementById('message');
 
-function buildGrid() {
-  grid = [];
-  ghostStarts = [];
-  totalDots = 0;
-  for (let y = 0; y < ROWS; y++) {
-    const row = [];
-    const line = MAP[y] || '';
-    for (let x = 0; x < COLS; x++) {
-      const c = line[x] || ' ';
-      let cell = { wall: false, dot: false, power: false, door: false };
-      if (c === '#') cell.wall = true;
-      else if (c === '.') { cell.dot = true; totalDots++; }
-      else if (c === 'o') { cell.power = true; totalDots++; }
-      else if (c === '=') cell.door = true;
-      else if (c === 'P') pacStart = {x, y};
-      else if (c === 'G') ghostStarts.push({x, y});
-      row.push(cell);
-    }
-    grid.push(row);
-  }
-  // подстраховка: если не хватило стартов призраков
-  while (ghostStarts.length < 4) {
-    ghostStarts.push({x: 13 + ghostStarts.length, y: 13});
-  }
-}
-
-const DIRS = {
-  left:  {x: -1, y:  0},
-  right: {x:  1, y:  0},
-  up:    {x:  0, y: -1},
-  down:  {x:  0, y:  1},
-};
-
-let pac, ghosts, score, lives, frightTimer, gameState;
-
-function isWall(x, y, allowDoor=false) {
-  // wraparound по x
-  if (y < 0 || y >= ROWS) return true;
-  const tx = ((x % COLS) + COLS) % COLS;
-  const cell = grid[y][tx];
-  if (!cell) return true;
-  if (cell.wall) return true;
-  if (cell.door && !allowDoor) return true;
-  return false;
-}
-
-function wrapX(x) {
-  return ((x % COLS) + COLS) % COLS;
-}
-
-function resetPositions() {
-  pac = {
-    x: pacStart.x,
-    y: pacStart.y,
-    px: pacStart.x * TILE,
-    py: pacStart.y * TILE,
-    dir: 'left',
-    nextDir: 'left',
-    speed: 1.4,
-    mouth: 0,
+  const DIRS = {
+    left:  {x: -1, y:  0},
+    right: {x:  1, y:  0},
+    up:    {x:  0, y: -1},
+    down:  {x:  0, y:  1},
   };
-  ghosts = [];
-  const colors = ['#ff0000', '#ffb8ff', '#00ffff', '#ffb852'];
-  for (let i = 0; i < 4; i++) {
-    const g = ghostStarts[i] || ghostStarts[0];
-    ghosts.push({
-      x: g.x,
-      y: g.y,
-      px: g.x * TILE,
-      py: g.y * TILE,
-      dir: ['up','down','left','right'][i % 4],
-      color: colors[i],
-      speed: 1.1,
-      frightened: false,
-      eaten: false,
-      home: {x: g.x, y: g.y},
-      startDelay: i * 60,
-    });
+  const OPPOSITE = { left:'right', right:'left', up:'down', down:'up' };
+
+  let grid = [];
+  let pacStart = {x: 13, y: 22};
+  let ghostStarts = [];
+  let totalDots = 0;
+
+  let pac, ghosts, score, lives, frightTimer, gameState;
+
+  function buildGrid() {
+    grid = [];
+    ghostStarts = [];
+    totalDots = 0;
+    for (let y = 0; y < ROWS; y++) {
+      const row = [];
+      const line = MAP[y] || '';
+      for (let x = 0; x < COLS; x++) {
+        const c = line[x] || ' ';
+        const cell = { wall: false, dot: false, power: false, door: false };
+        if (c === '#') cell.wall = true;
+        else if (c === '.') { cell.dot = true; totalDots++; }
+        else if (c === 'o') { cell.power = true; totalDots++; }
+        else if (c === '=') cell.door = true;
+        else if (c === 'P') pacStart = {x, y};
+        else if (c === 'G') ghostStarts.push({x, y});
+        row.push(cell);
+      }
+      grid.push(row);
+    }
+    while (ghostStarts.length < 4) {
+      ghostStarts.push({x: 13 + ghostStarts.length, y: 13});
+    }
   }
-  frightTimer = 0;
-}
 
-function newGame() {
-  buildGrid();
-  score = 0;
-  lives = 3;
-  gameState = 'play';
-  resetPositions();
-  updateHUD();
-  messageEl.textContent = '';
-}
-
-function updateHUD() {
-  scoreEl.textContent = score;
-  livesEl.textContent = lives;
-}
-
-// движение по тайлам с плавностью
-function tryMove(entity, dir, speed, allowDoor=false) {
-  const d = DIRS[dir];
-  if (!d) return false;
-  const cx = entity.px + TILE/2;
-  const cy = entity.py + TILE/2;
-  // центр текущего тайла
-  const tx = Math.floor(cx / TILE);
-  const ty = Math.floor(cy / TILE);
-
-  // Проверим, можем ли двигаться в направлении dir с текущей позиции
-  // Используем переднюю кромку
-  const nx = entity.px + d.x * speed;
-  const ny = entity.py + d.y * speed;
-
-  // Тайлы которые перекрывает entity (16x16) в новой позиции
-  const wrappedX = ((nx % (COLS*TILE)) + COLS*TILE) % (COLS*TILE);
-  const left = Math.floor(wrappedX / TILE);
-  const right = Math.floor((wrappedX + TILE - 1) / TILE) % COLS;
-  const top = Math.floor(ny / TILE);
-  const bot = Math.floor((ny + TILE - 1) / TILE);
-
-  // Проверяем все 4 угла
-  const corners = [[left, top],[right, top],[left, bot],[right, bot]];
-  for (const [tx2, ty2] of corners) {
-    if (isWall(tx2, ty2, allowDoor)) return false;
+  function wrapX(x) {
+    return ((x % COLS) + COLS) % COLS;
   }
-  entity.px = nx;
-  entity.py = ny;
-  // wraparound
-  if (entity.px < -TILE/2) entity.px += COLS * TILE;
-  if (entity.px > COLS * TILE - TILE/2) entity.px -= COLS * TILE;
-  entity.x = Math.floor((entity.px + TILE/2) / TILE);
-  entity.y = Math.floor((entity.py + TILE/2) / TILE);
-  return true;
-}
 
-function atTileCenter(entity) {
-  return (entity.px % TILE) === 0 && (entity.py % TILE) === 0;
-}
+  function isWall(x, y, allowDoor) {
+    if (y < 0 || y >= ROWS) return true;
+    const tx = wrapX(x);
+    const cell = grid[y][tx];
+    if (!cell) return true;
+    if (cell.wall) return true;
+    if (cell.door && !allowDoor) return true;
+    return false;
+  }
 
-function updatePac() {
-  // Если по центру тайла — можем сменить направление
-  if (atTileCenter(pac)) {
-    const d = DIRS[pac.nextDir];
-    const nx = pac.x + d.x;
-    const ny = pac.y + d.y;
-    if (!isWall(nx, ny)) {
+  function isInHouse(tx, ty) {
+    return ty >= 12 && ty <= 15 && tx >= 10 && tx <= 17;
+  }
+
+  function resetPositions() {
+    pac = {
+      tx: pacStart.x, ty: pacStart.y,
+      px: pacStart.x * TILE, py: pacStart.y * TILE,
+      dir: 'left', nextDir: 'left',
+      speed: 2,
+      mouth: 0,
+    };
+    ghosts = [];
+    const colors = ['#ff0000', '#ffb8ff', '#00ffff', '#ffb852'];
+    for (let i = 0; i < 4; i++) {
+      const g = ghostStarts[i] || ghostStarts[0];
+      ghosts.push({
+        tx: g.x, ty: g.y,
+        px: g.x * TILE, py: g.y * TILE,
+        dir: ['up','down','left','right'][i % 4],
+        color: colors[i],
+        speed: 2,
+        frightened: false,
+        eaten: false,
+        home: {x: g.x, y: g.y},
+        startDelay: i * 40,
+      });
+    }
+    frightTimer = 0;
+  }
+
+  function newGame() {
+    buildGrid();
+    score = 0;
+    lives = START_LIVES;
+    gameState = 'play';
+    resetPositions();
+    updateHUD();
+    messageEl.textContent = '';
+  }
+
+  function updateHUD() {
+    scoreEl.textContent = score;
+    livesEl.textContent = lives;
+  }
+
+  function atTileCenter(e) {
+    return (e.px % TILE) === 0 && (e.py % TILE) === 0;
+  }
+
+  function tryStep(e, dir, allowDoor) {
+    const d = DIRS[dir];
+    if (!d) return false;
+    const nx = e.px + d.x * e.speed;
+    const ny = e.py + d.y * e.speed;
+    // Тайлы которые покрывает entity (16x16) в новой позиции
+    const wrappedX = ((nx % (COLS*TILE)) + COLS*TILE) % (COLS*TILE);
+    const left = Math.floor(wrappedX / TILE);
+    const right = Math.floor((wrappedX + TILE - 1) / TILE) % COLS;
+    const top = Math.floor(ny / TILE);
+    const bot = Math.floor((ny + TILE - 1) / TILE);
+    if (isWall(left, top, allowDoor)) return false;
+    if (isWall(right, top, allowDoor)) return false;
+    if (isWall(left, bot, allowDoor)) return false;
+    if (isWall(right, bot, allowDoor)) return false;
+    e.px = nx;
+    e.py = ny;
+    // wraparound по горизонтали
+    if (e.px < -TILE) e.px += COLS * TILE;
+    if (e.px >= COLS * TILE) e.px -= COLS * TILE;
+    e.tx = Math.floor((e.px + TILE/2) / TILE);
+    e.ty = Math.floor((e.py + TILE/2) / TILE);
+    if (e.tx < 0) e.tx += COLS;
+    if (e.tx >= COLS) e.tx -= COLS;
+    return true;
+  }
+
+  function updatePac() {
+    // Разворот можно сделать мгновенно
+    if (pac.nextDir !== pac.dir && pac.nextDir === OPPOSITE[pac.dir]) {
       pac.dir = pac.nextDir;
+    } else if (pac.nextDir !== pac.dir && atTileCenter(pac)) {
+      const d = DIRS[pac.nextDir];
+      if (!isWall(pac.tx + d.x, pac.ty + d.y, false)) {
+        pac.dir = pac.nextDir;
+      }
     }
-  }
-  // Двигаемся
-  const moved = tryMove(pac, pac.dir, pac.speed);
-  if (moved) pac.mouth = (pac.mouth + 0.15) % (Math.PI);
-
-  // Собираем точки
-  const tx = wrapX(pac.x);
-  const ty = pac.y;
-  if (ty >= 0 && ty < ROWS) {
-    const cell = grid[ty][tx];
-    if (cell) {
-      if (cell.dot) { cell.dot = false; score += 10; totalDots--; }
-      if (cell.power) { cell.power = false; score += 50; totalDots--; frightTimer = 360; ghosts.forEach(g => { if (!g.eaten) g.frightened = true; }); }
+    if (tryStep(pac, pac.dir, false)) {
+      pac.mouth = (pac.mouth + 0.18) % Math.PI;
     }
-  }
 
-  if (totalDots <= 0) {
-    gameState = 'win';
-    messageEl.textContent = 'Победа! Нажми R чтобы играть снова';
-  }
-}
-
-function ghostAI(g) {
-  // если в стартовой задержке — стоит
-  if (g.startDelay > 0) { g.startDelay--; return; }
-
-  if (atTileCenter(g)) {
-    // На перекрёстке — выбрать направление
-    const choices = [];
-    const opposite = { left:'right', right:'left', up:'down', down:'up' }[g.dir];
-    for (const dir of ['up','left','down','right']) {
-      if (dir === opposite) continue;
-      const d = DIRS[dir];
-      const nx = g.x + d.x;
-      const ny = g.y + d.y;
-      const allowDoor = g.eaten;
-      if (!isWall(nx, ny, allowDoor)) choices.push(dir);
-    }
-    if (choices.length === 0) {
-      // развернуться
-      choices.push(opposite);
-    }
-    // Цель: за пакманом, при frightened — случайное, при eaten — домой
-    let target;
-    if (g.eaten) target = g.home;
-    else if (g.frightened) target = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) };
-    else target = { x: pac.x, y: pac.y };
-
-    let best = choices[0];
-    let bestDist = Infinity;
-    for (const dir of choices) {
-      const d = DIRS[dir];
-      const nx = g.x + d.x;
-      const ny = g.y + d.y;
-      const dist = (nx-target.x)*(nx-target.x) + (ny-target.y)*(ny-target.y);
-      if (dist < bestDist) { bestDist = dist; best = dir; }
-    }
-    g.dir = best;
-  }
-
-  let speed = g.speed;
-  if (g.frightened) speed *= 0.6;
-  if (g.eaten) speed *= 2;
-
-  const moved = tryMove(g, g.dir, speed, g.eaten || isInHouse(g));
-  if (!moved) {
-    // не смог идти — на следующем тике на центре выберется новое направление
-  }
-
-  // если eaten добрался домой — оживает
-  if (g.eaten && Math.abs(g.px - g.home.x*TILE) < 2 && Math.abs(g.py - g.home.y*TILE) < 2) {
-    g.eaten = false;
-    g.frightened = false;
-  }
-}
-
-function isInHouse(g) {
-  return g.y >= 12 && g.y <= 15 && g.x >= 10 && g.x <= 17;
-}
-
-function checkCollisions() {
-  for (const g of ghosts) {
-    const dx = g.px - pac.px;
-    const dy = g.py - pac.py;
-    if (Math.abs(dx) < TILE*0.6 && Math.abs(dy) < TILE*0.6) {
-      if (g.frightened && !g.eaten) {
-        g.eaten = true;
-        g.frightened = false;
-        score += 200;
-      } else if (!g.eaten) {
-        // Пакман умирает
-        lives--;
-        if (lives <= 0) {
-          gameState = 'lose';
-          messageEl.textContent = 'Game Over! Нажми R чтобы начать заново';
-        } else {
-          resetPositions();
+    // Сбор точек
+    if (pac.ty >= 0 && pac.ty < ROWS) {
+      const cell = grid[pac.ty][wrapX(pac.tx)];
+      if (cell) {
+        if (cell.dot) { cell.dot = false; score += 10; totalDots--; }
+        if (cell.power) {
+          cell.power = false; score += 50; totalDots--;
+          frightTimer = 360;
+          ghosts.forEach(g => { if (!g.eaten) g.frightened = true; });
         }
-        return;
       }
     }
-  }
-}
 
-// Отрисовка
-function draw() {
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // лабиринт
-  for (let y = 0; y < ROWS; y++) {
-    for (let x = 0; x < COLS; x++) {
-      const cell = grid[y][x];
-      if (!cell) continue;
-      const px = x * TILE;
-      const py = y * TILE;
-      if (cell.wall) {
-        ctx.fillStyle = '#1e3a8a';
-        ctx.fillRect(px+2, py+2, TILE-4, TILE-4);
-      } else if (cell.door) {
-        ctx.fillStyle = '#f8a';
-        ctx.fillRect(px, py + TILE/2 - 1, TILE, 2);
-      }
-      if (cell.dot) {
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(px + TILE/2 - 1, py + TILE/2 - 1, 2, 2);
-      }
-      if (cell.power) {
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(px + TILE/2, py + TILE/2, 4, 0, Math.PI*2);
-        ctx.fill();
-      }
+    if (totalDots <= 0) {
+      gameState = 'win';
+      messageEl.textContent = 'Победа! Нажми R чтобы играть снова';
     }
   }
 
-  // призраки
-  for (const g of ghosts) {
-    const cx = g.px + TILE/2;
-    const cy = g.py + TILE/2;
-    let color = g.color;
-    if (g.eaten) color = '#222';
-    else if (g.frightened) color = frightTimer < 120 && Math.floor(frightTimer/10) % 2 === 0 ? '#fff' : '#2222ff';
-    ctx.fillStyle = color;
+  function ghostAI(g) {
+    if (g.startDelay > 0) { g.startDelay--; return; }
+
+    if (atTileCenter(g)) {
+      const choices = [];
+      const opp = OPPOSITE[g.dir];
+      const allowDoor = g.eaten || isInHouse(g.tx, g.ty);
+      for (const dir of ['up','left','down','right']) {
+        if (dir === opp) continue;
+        const d = DIRS[dir];
+        if (!isWall(g.tx + d.x, g.ty + d.y, allowDoor)) choices.push(dir);
+      }
+      if (choices.length === 0) choices.push(opp);
+
+      let target;
+      if (g.eaten) target = g.home;
+      else if (g.frightened) target = { x: Math.floor(Math.random()*COLS), y: Math.floor(Math.random()*ROWS) };
+      else target = { x: pac.tx, y: pac.ty };
+
+      let best = choices[0];
+      let bestDist = Infinity;
+      for (const dir of choices) {
+        const d = DIRS[dir];
+        const nx = g.tx + d.x;
+        const ny = g.ty + d.y;
+        const dist = (nx-target.x)*(nx-target.x) + (ny-target.y)*(ny-target.y);
+        if (dist < bestDist) { bestDist = dist; best = dir; }
+      }
+      g.dir = best;
+    }
+
+    const allowDoor = g.eaten || isInHouse(g.tx, g.ty);
+    const origSpeed = g.speed;
+    if (g.frightened && !g.eaten) g.speed = 1;
+    if (g.eaten) g.speed = 4;
+    tryStep(g, g.dir, allowDoor);
+    g.speed = origSpeed;
+
+    if (g.eaten && g.tx === g.home.x && g.ty === g.home.y && atTileCenter(g)) {
+      g.eaten = false;
+      g.frightened = false;
+    }
+  }
+
+  function checkCollisions() {
+    for (const g of ghosts) {
+      const dx = g.px - pac.px;
+      const dy = g.py - pac.py;
+      if (Math.abs(dx) < TILE*0.6 && Math.abs(dy) < TILE*0.6) {
+        if (g.frightened && !g.eaten) {
+          g.eaten = true;
+          g.frightened = false;
+          score += 200;
+        } else if (!g.eaten) {
+          lives--;
+          if (lives <= 0) {
+            gameState = 'lose';
+            messageEl.textContent = 'Game Over! Нажми R чтобы начать заново';
+          } else {
+            resetPositions();
+          }
+          return;
+        }
+      }
+    }
+  }
+
+  function draw() {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        const cell = grid[y][x];
+        if (!cell) continue;
+        const px = x * TILE;
+        const py = y * TILE;
+        if (cell.wall) {
+          ctx.fillStyle = '#1e3a8a';
+          ctx.fillRect(px+2, py+2, TILE-4, TILE-4);
+        } else if (cell.door) {
+          ctx.fillStyle = '#f8a';
+          ctx.fillRect(px, py + TILE/2 - 1, TILE, 2);
+        }
+        if (cell.dot) {
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(px + TILE/2 - 1, py + TILE/2 - 1, 2, 2);
+        }
+        if (cell.power) {
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.arc(px + TILE/2, py + TILE/2, 4, 0, Math.PI*2);
+          ctx.fill();
+        }
+      }
+    }
+
+    for (const g of ghosts) {
+      const cx = g.px + TILE/2;
+      const cy = g.py + TILE/2;
+      let color = g.color;
+      if (g.eaten) color = '#222';
+      else if (g.frightened) {
+        const blink = frightTimer < 120 && Math.floor(frightTimer/10) % 2 === 0;
+        color = blink ? '#fff' : '#2222ff';
+      }
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(cx, cy - 1, TILE/2 - 1, Math.PI, 0);
+      ctx.lineTo(cx + TILE/2 - 1, cy + TILE/2 - 2);
+      const waves = 3;
+      const w = (TILE - 2) / waves;
+      for (let i = 0; i < waves; i++) {
+        const sx = cx + TILE/2 - 1 - i*w;
+        ctx.lineTo(sx - w/2, cy + TILE/2 - 5);
+        ctx.lineTo(sx - w, cy + TILE/2 - 2);
+      }
+      ctx.closePath();
+      ctx.fill();
+      if (!g.frightened || g.eaten) {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(cx - 3, cy - 2, 2.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 3, cy - 2, 2.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#00f';
+        const d = DIRS[g.dir] || DIRS.left;
+        ctx.beginPath(); ctx.arc(cx - 3 + d.x, cy - 2 + d.y, 1.2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 3 + d.x, cy - 2 + d.y, 1.2, 0, Math.PI*2); ctx.fill();
+      } else {
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(cx - 4, cy - 2, 2, 2);
+        ctx.fillRect(cx + 2, cy - 2, 2, 2);
+      }
+    }
+
+    const cx = pac.px + TILE/2;
+    const cy = pac.py + TILE/2;
+    const mouthAngle = Math.abs(Math.sin(pac.mouth)) * 0.6;
+    let dirAngle = 0;
+    if (pac.dir === 'right') dirAngle = 0;
+    else if (pac.dir === 'down') dirAngle = Math.PI/2;
+    else if (pac.dir === 'left') dirAngle = Math.PI;
+    else if (pac.dir === 'up') dirAngle = -Math.PI/2;
+    ctx.fillStyle = '#ff0';
     ctx.beginPath();
-    ctx.arc(cx, cy - 1, TILE/2 - 1, Math.PI, 0);
-    ctx.lineTo(cx + TILE/2 - 1, cy + TILE/2 - 2);
-    // волнистый низ
-    const waves = 3;
-    const w = (TILE - 2) / waves;
-    for (let i = 0; i < waves; i++) {
-      const sx = cx + TILE/2 - 1 - i*w;
-      ctx.lineTo(sx - w/2, cy + TILE/2 - 5);
-      ctx.lineTo(sx - w, cy + TILE/2 - 2);
-    }
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, TILE/2 - 1, dirAngle + mouthAngle, dirAngle - mouthAngle + Math.PI*2);
     ctx.closePath();
     ctx.fill();
-    // глаза
-    if (!g.frightened || g.eaten) {
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(cx - 3, cy - 2, 2.5, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(cx + 3, cy - 2, 2.5, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#00f';
-      const d = DIRS[g.dir];
-      ctx.beginPath(); ctx.arc(cx - 3 + d.x, cy - 2 + d.y, 1.2, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(cx + 3 + d.x, cy - 2 + d.y, 1.2, 0, Math.PI*2); ctx.fill();
-    } else {
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(cx - 4, cy - 2, 2, 2);
-      ctx.fillRect(cx + 2, cy - 2, 2, 2);
-      ctx.beginPath();
-      ctx.moveTo(cx - 4, cy + 3);
-      ctx.lineTo(cx - 2, cy + 1);
-      ctx.lineTo(cx, cy + 3);
-      ctx.lineTo(cx + 2, cy + 1);
-      ctx.lineTo(cx + 4, cy + 3);
-      ctx.strokeStyle = '#fff';
-      ctx.stroke();
-    }
   }
 
-  // пакман
-  const cx = pac.px + TILE/2;
-  const cy = pac.py + TILE/2;
-  const mouthAngle = Math.abs(Math.sin(pac.mouth)) * 0.6;
-  let dirAngle = 0;
-  if (pac.dir === 'right') dirAngle = 0;
-  else if (pac.dir === 'down') dirAngle = Math.PI/2;
-  else if (pac.dir === 'left') dirAngle = Math.PI;
-  else if (pac.dir === 'up') dirAngle = -Math.PI/2;
-  ctx.fillStyle = '#ff0';
-  ctx.beginPath();
-  ctx.moveTo(cx, cy);
-  ctx.arc(cx, cy, TILE/2 - 1, dirAngle + mouthAngle, dirAngle - mouthAngle + Math.PI*2);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function loop() {
-  if (gameState === 'play') {
-    updatePac();
-    for (const g of ghosts) ghostAI(g);
-    if (frightTimer > 0) {
-      frightTimer--;
-      if (frightTimer === 0) ghosts.forEach(g => g.frightened = false);
+  function loop() {
+    try {
+      if (gameState === 'play') {
+        updatePac();
+        for (const g of ghosts) ghostAI(g);
+        if (frightTimer > 0) {
+          frightTimer--;
+          if (frightTimer === 0) ghosts.forEach(g => g.frightened = false);
+        }
+        checkCollisions();
+        updateHUD();
+      }
+      draw();
+    } catch (err) {
+      console.error('Game loop error:', err);
     }
-    checkCollisions();
-    updateHUD();
+    requestAnimationFrame(loop);
   }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft') pac.nextDir = 'left';
+    else if (e.key === 'ArrowRight') pac.nextDir = 'right';
+    else if (e.key === 'ArrowUp') pac.nextDir = 'up';
+    else if (e.key === 'ArrowDown') pac.nextDir = 'down';
+    else if (e.key === 'r' || e.key === 'R') newGame();
+    if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) e.preventDefault();
+  });
+
+  newGame();
   draw();
   requestAnimationFrame(loop);
-}
-
-document.addEventListener('keydown', e => {
-  if (e.key === 'ArrowLeft') pac.nextDir = 'left';
-  else if (e.key === 'ArrowRight') pac.nextDir = 'right';
-  else if (e.key === 'ArrowUp') pac.nextDir = 'up';
-  else if (e.key === 'ArrowDown') pac.nextDir = 'down';
-  else if (e.key === 'r' || e.key === 'R') newGame();
-  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) e.preventDefault();
-});
-
-newGame();
-loop();
+})();
 </script>
 </body>
 </html>
