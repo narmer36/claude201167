@@ -40,7 +40,7 @@
   <h1 style="color:#ff0;margin:5px">PAC-MAN</h1>
   <div id="hud">
     <div>Очки: <span id="score">0</span></div>
-    <div>Жизни: <span id="lives">3</span></div>
+    <div>Жизни: <span id="lives">20</span></div>
   </div>
   <canvas id="game" width="448" height="496"></canvas>
   <div id="message"></div>
@@ -184,7 +184,7 @@ function resetPositions() {
 function newGame() {
   buildGrid();
   score = 0;
-  lives = 3;
+  lives = 20;
   gameState = 'play';
   resetPositions();
   updateHUD();
