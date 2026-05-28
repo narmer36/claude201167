@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Локальный TTS — Озвучка текста</title>
+<style>
+  /* ───── базовая раскладка ───── */
+  :root {
+    --bg: #0f1216;
+    --panel: #161b22;
+    --panel-2: #1c232c;
+    --border: #2a323d;
+    --text: #e6edf3;
+    --muted: #9aa7b3;
+    --accent: #3b82f6;
+    --accent-2: #22c55e;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: linear-gradient(180deg, #0b0e12, #0f1216 60%);
+    color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  .app {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 24px 18px 60px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 4px;
+    letter-spacing: .2px;
+  }
+  .sub {
+    color: var(--muted);
+    margin-bottom: 18px;
+    font-size: 13px;
+  }
+  .grid {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: 1fr 320px;
+  }
+  @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin: 0 0 10px;
+    font-weight: 600;
+  }
+  textarea {
+    width: 100%;
+    min-height: 240px;
+    resize: vertical;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 12px 14px;
+    font: inherit;
+    line-height: 1.55;
+  }
+  textarea:focus { outline: 2px solid var(--accent); }
+  .row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 10px;
+  }
+  button, select, input[type="range"] {
+    font: inherit;
+    color: var(--text);
+  }
+  button {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, transform .05s;
+  }
+  button:hover { background: #232c37; }
+  button:active { transform: translateY(1px); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+  button.primary:hover { background: #2f6fd1; }
+  button.success { background: var(--accent-2); border-color: var(--accent-2); color: #06210d; }
+  button.warn    { background: var(--warn);    border-color: var(--warn);    color: #2a1a00; }
+  button.danger  { background: var(--danger);  border-color: var(--danger);  color: white; }
+  button[disabled] { opacity: .5; cursor: not-allowed; }
+  select {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    width: 100%;
+  }
+  label.field {
+    display: block;
+    margin-top: 10px;
+  }
+  label.field .lbl {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  input[type="range"] { width: 100%; }
+  .stats {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 8px;
+  }
+  .status {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    font-size: 13px;
+    min-height: 36px;
+  }
+  .status.ok      { border-color: #1f6f3e; }
+  .status.warn    { border-color: #7a5a16; }
+  .status.err     { border-color: #7a1f1f; }
+  .progress {
+    height: 6px;
+    background: #0b0f14;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .progress > div {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    transition: width .2s linear;
+  }
+  .queue {
+    margin-top: 10px;
+    max-height: 140px;
+    overflow: auto;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .queue .item { padding: 4px 6px; border-bottom: 1px solid #20262e; }
+  .queue .item:last-child { border-bottom: none; }
+  .queue .item.active { color: var(--accent); }
+  .queue .item.done   { color: var(--muted); opacity: .55; }
+  .kbd {
+    background: #0b0f14;
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  details { margin-top: 14px; }
+  details summary {
+    cursor: pointer;
+    color: var(--muted);
+    padding: 6px 0;
+  }
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>🗣️ Локальный TTS — озвучка текста</h1>
+  <div class="sub">
+    Веб-приложение использует системные голоса Windows (SAPI / Microsoft TTS) через Web Speech API.
+    Работает офлайн, без отправки текста на сторонние серверы.
+  </div>
+
+  <div class="grid">
+    <!-- ── Левая колонка: текст + транспорт ── -->
+    <div>
+      <div class="panel">
+        <h2>Текст для озвучивания</h2>
+        <textarea id="text" placeholder="Вставьте сюда текст. Поддерживаются длинные тексты — они будут разбиты на фрагменты и поставлены в очередь."></textarea>
+        <div class="stats">
+          <span id="charCount">0</span> символов ·
+          <span id="chunkCount">0</span> фрагментов ·
+          оценка: <span id="estimate">~0 с</span>
+        </div>
+
+        <div class="row">
+          <button id="btnPlay" class="primary">▶ Озвучить</button>
+          <button id="btnPause">⏸ Пауза</button>
+          <button id="btnResume" disabled>⏵ Продолжить</button>
+          <button id="btnStop" class="danger">⏹ Стоп</button>
+          <button id="btnSave" class="success">💾 Сохранить в файл</button>
+          <button id="btnClear">🗑 Очистить</button>
+        </div>
+
+        <div class="status" id="status">Готов к работе.</div>
+        <div class="progress"><div id="progressBar"></div></div>
+
+        <details>
+          <summary>Очередь воспроизведения</summary>
+          <div class="queue" id="queue"></div>
+        </details>
+
+        <details>
+          <summary>Горячие клавиши и подсказки</summary>
+          <div class="hint">
+            <p><span class="kbd">Ctrl</span> + <span class="kbd">Enter</span> — озвучить · <span class="kbd">Esc</span> — остановить.</p>
+            <p>Длинные тексты автоматически делятся на фрагменты до 200 символов по границам предложений, что снижает задержки и обходит ограничения движков Windows.</p>
+            <p>Сохранение в файл реализовано через запись аудио вкладки (Chrome / Edge): после нажатия «Сохранить» появится системный диалог — выберите эту вкладку и обязательно отметьте «Поделиться звуком».</p>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- ── Правая колонка: настройки ── -->
+    <div>
+      <div class="panel">
+        <h2>Параметры синтеза</h2>
+
+        <label class="field">
+          <span class="lbl"><span>Язык</span><span id="langCount">0 голосов</span></span>
+          <select id="lang"></select>
+        </label>
+
+        <label class="field">
+          <span class="lbl"><span>Голос</span><span></span></span>
+          <select id="voice"></select>
+        </label>
+
+        <label class="field">
+          <span class="lbl"><span>Скорость</span><span id="rateVal">1.00</span></span>
+          <input id="rate" type="range" min="0.5" max="2" step="0.05" value="1" />
+        </label>
+
+        <label class="field">
+          <span class="lbl"><span>Тон</span><span id="pitchVal">1.00</span></span>
+          <input id="pitch" type="range" min="0" max="2" step="0.05" value="1" />
+        </label>
+
+        <label class="field">
+          <span class="lbl"><span>Громкость</span><span id="volVal">1.00</span></span>
+          <input id="vol" type="range" min="0" max="1" step="0.05" value="1" />
+        </label>
+
+        <label class="field">
+          <span class="lbl"><span>Размер фрагмента</span><span id="chunkVal">200 симв.</span></span>
+          <input id="chunk" type="range" min="80" max="500" step="10" value="200" />
+        </label>
+
+        <details>
+          <summary>Доп. рекомендации</summary>
+          <div class="hint">
+            <p>В Windows для русского языка установите «Параметры → Время и язык → Речь → Управление голосами» — добавьте Microsoft Irina / Pavel или загрузите дополнительные пакеты SAPI.</p>
+            <p>Для офлайн-нейросетевого качества используйте серверный движок (Piper, Coqui XTTS) — см. README проекта.</p>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   Локальный TTS — модуль управления синтезом речи.
+   Реализация одной страницей: UI + ядро + очередь + запись.
+   ============================================================ */
+
+/* ---------- утилиты ---------- */
+const $ = (id) => document.getElementById(id);
+const log = (msg, kind = "") => {
+  const s = $("status");
+  s.textContent = msg;
+  s.className = "status " + kind;
+};
+
+/* ---------- состояние ---------- */
+const state = {
+  voices: [],           // полный список голосов SpeechSynthesis
+  currentChunks: [],    // активная очередь фрагментов
+  currentIndex: 0,      // индекс текущего фрагмента
+  utter: null,          // текущий SpeechSynthesisUtterance
+  isPlaying: false,
+  isPaused: false,
+  cache: new Map(),     // кэш разбиений: hash(text+chunkSize) → массив строк
+  recorder: null,       // MediaRecorder для функции «Сохранить в файл»
+  recStream: null,
+  recChunks: [],
+};
+
+/* ---------- разбиение текста на фрагменты ----------
+   Длинные тексты в Web Speech API часто обрываются (особенно
+   движками Windows SAPI). Разбиваем по предложениям, затем
+   объединяем в куски ≤ chunkSize символов.
+*/
+function splitText(text, chunkSize) {
+  const key = chunkSize + "::" + text.length + "::" + text.slice(0, 64);
+  if (state.cache.has(key)) return state.cache.get(key);
+
+  // Регулярка: ищем границы предложений по знакам конца + пробелу/переводу строки.
+  const sentences = text
+    .replace(/\r\n/g, "\n")
+    .split(/(?<=[.!?…])\s+|\n{2,}/g)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const chunks = [];
+  let buf = "";
+  for (const s of sentences) {
+    // Если одно предложение длиннее лимита — режем его дополнительно по запятым/пробелам.
+    if (s.length > chunkSize) {
+      if (buf) { chunks.push(buf); buf = ""; }
+      let rest = s;
+      while (rest.length > chunkSize) {
+        let cut = rest.lastIndexOf(",", chunkSize);
+        if (cut < chunkSize * 0.5) cut = rest.lastIndexOf(" ", chunkSize);
+        if (cut <= 0) cut = chunkSize;
+        chunks.push(rest.slice(0, cut).trim());
+        rest = rest.slice(cut).trim();
+      }
+      if (rest) buf = rest;
+      continue;
+    }
+    if ((buf + " " + s).trim().length <= chunkSize) {
+      buf = (buf ? buf + " " : "") + s;
+    } else {
+      if (buf) chunks.push(buf);
+      buf = s;
+    }
+  }
+  if (buf) chunks.push(buf);
+
+  state.cache.set(key, chunks);
+  return chunks;
+}
+
+/* ---------- инициализация и загрузка голосов ----------
+   speechSynthesis.getVoices() заполняется асинхронно — на onvoiceschanged.
+*/
+function loadVoices() {
+  const all = speechSynthesis.getVoices();
+  state.voices = all;
+
+  // Группируем по языку.
+  const langs = new Map();
+  for (const v of all) {
+    const lang = v.lang || "unknown";
+    if (!langs.has(lang)) langs.set(lang, []);
+    langs.get(lang).push(v);
+  }
+
+  // Заполняем селектор языков, ставим русский по умолчанию (если есть).
+  const langSel = $("lang");
+  langSel.innerHTML = "";
+  const sortedLangs = [...langs.keys()].sort((a, b) => {
+    if (a.startsWith("ru")) return -1;
+    if (b.startsWith("ru")) return 1;
+    return a.localeCompare(b);
+  });
+  for (const l of sortedLangs) {
+    const opt = document.createElement("option");
+    opt.value = l;
+    opt.textContent = `${l} (${langs.get(l).length})`;
+    langSel.appendChild(opt);
+  }
+  if (sortedLangs.length === 0) {
+    log("В системе не найдены TTS-голоса. Установите пакеты речи в Windows.", "err");
+  }
+  fillVoiceSelect();
+}
+
+function fillVoiceSelect() {
+  const lang = $("lang").value;
+  const voiceSel = $("voice");
+  voiceSel.innerHTML = "";
+  const filtered = state.voices.filter((v) => v.lang === lang);
+  $("langCount").textContent = `${filtered.length} голосов`;
+  for (const v of filtered) {
+    const opt = document.createElement("option");
+    opt.value = v.name;
+    opt.textContent = `${v.name}${v.default ? " (по умолчанию)" : ""}`;
+    voiceSel.appendChild(opt);
+  }
+}
+
+/* ---------- основной цикл воспроизведения ----------
+   Использует setTimeout-обвязку, чтобы не блокировать UI:
+   каждый чанк создаёт собственный Utterance, end-event запускает следующий.
+*/
+function playChunks() {
+  if (state.currentIndex >= state.currentChunks.length) {
+    state.isPlaying = false;
+    updateButtons();
+    log("Готово. Воспроизведение завершено.", "ok");
+    $("progressBar").style.width = "100%";
+    if (state.recorder && state.recorder.state === "recording") {
+      // даём короткий хвост, чтобы поймать концовку звука
+      setTimeout(stopRecording, 350);
+    }
+    return;
+  }
+
+  const text = state.currentChunks[state.currentIndex];
+  const utter = new SpeechSynthesisUtterance(text);
+  const voiceName = $("voice").value;
+  const voice = state.voices.find((v) => v.name === voiceName);
+  if (voice) utter.voice = voice;
+  utter.lang = $("lang").value || "ru-RU";
+  utter.rate   = parseFloat($("rate").value);
+  utter.pitch  = parseFloat($("pitch").value);
+  utter.volume = parseFloat($("vol").value);
+
+  utter.onstart = () => {
+    markQueue(state.currentIndex, "active");
+    const pct = (state.currentIndex / state.currentChunks.length) * 100;
+    $("progressBar").style.width = pct.toFixed(1) + "%";
+    log(`Воспроизведение: фрагмент ${state.currentIndex + 1} из ${state.currentChunks.length}`);
+  };
+  utter.onend = () => {
+    markQueue(state.currentIndex, "done");
+    state.currentIndex += 1;
+    // микро-задержка нужна, чтобы Chrome не «склеил» события и не завис.
+    setTimeout(playChunks, 60);
+  };
+  utter.onerror = (e) => {
+    // canceled происходит при нашем же stop() — это не ошибка.
+    if (e.error === "canceled" || e.error === "interrupted") return;
+    log("Ошибка синтеза: " + e.error, "err");
+    state.isPlaying = false;
+    updateButtons();
+  };
+
+  state.utter = utter;
+  speechSynthesis.speak(utter);
+}
+
+/* ---------- UI обновления ---------- */
+function updateButtons() {
+  $("btnPlay").disabled   = state.isPlaying && !state.isPaused;
+  $("btnPause").disabled  = !state.isPlaying || state.isPaused;
+  $("btnResume").disabled = !state.isPaused;
+  $("btnStop").disabled   = !state.isPlaying;
+}
+
+function renderQueue() {
+  const box = $("queue");
+  box.innerHTML = "";
+  state.currentChunks.forEach((c, i) => {
+    const div = document.createElement("div");
+    div.className = "item";
+    div.dataset.idx = i;
+    div.textContent = `[${i + 1}] ${c.slice(0, 80)}${c.length > 80 ? "…" : ""}`;
+    box.appendChild(div);
+  });
+}
+function markQueue(idx, cls) {
+  const box = $("queue");
+  for (const el of box.querySelectorAll(".item")) el.classList.remove("active");
+  const cur = box.querySelector(`.item[data-idx="${idx}"]`);
+  if (cur) cur.classList.add(cls);
+}
+
+/* ---------- статистика и предпросчёт ---------- */
+function recomputeStats() {
+  const t = $("text").value;
+  const cs = parseInt($("chunk").value, 10);
+  const chunks = t.trim() ? splitText(t, cs) : [];
+  $("charCount").textContent  = t.length;
+  $("chunkCount").textContent = chunks.length;
+  // средняя скорость русской речи ≈ 14 симв./с при rate=1.0
+  const rate = parseFloat($("rate").value) || 1;
+  const sec = Math.round(t.length / (14 * rate));
+  $("estimate").textContent = `~${sec} с`;
+}
+
+/* ---------- сохранение в файл (запись звука вкладки) ----------
+   Web Speech API не отдаёт сырое аудио. Самый надёжный способ
+   в браузере — getDisplayMedia({ audio: true }) с захватом аудио
+   текущей вкладки. Пользователь подтверждает диалог.
+*/
+async function startRecordingAndPlay() {
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    log("Запись недоступна: браузер не поддерживает getDisplayMedia.", "err");
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,                        // обязателен для совместимости с Chrome
+      audio: { suppressLocalAudioPlayback: false },
+    });
+    const audioTracks = stream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      stream.getTracks().forEach((t) => t.stop());
+      log("Не получен аудио-поток. Включите «Поделиться звуком» в диалоге.", "warn");
+      return;
+    }
+    // Видео нам не нужно — сразу гасим, оставляем только аудио.
+    stream.getVideoTracks().forEach((t) => t.stop());
+    const audioOnly = new MediaStream(audioTracks);
+    state.recStream  = stream;
+    state.recChunks  = [];
+    state.recorder   = new MediaRecorder(audioOnly, { mimeType: "audio/webm" });
+    state.recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size) state.recChunks.push(e.data);
+    };
+    state.recorder.onstop = () => {
+      const blob = new Blob(state.recChunks, { type: "audio/webm" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href = url;
+      a.download = `tts-${Date.now()}.webm`;
+      a.click();
+      URL.revokeObjectURL(url);
+      state.recStream?.getTracks().forEach((t) => t.stop());
+      state.recStream = null;
+      state.recorder  = null;
+      log("Файл сохранён.", "ok");
+    };
+    state.recorder.start();
+    log("Идёт запись… дождитесь окончания озвучки.", "warn");
+    startPlaybackInternal();
+  } catch (err) {
+    log("Запись отменена: " + err.message, "warn");
+  }
+}
+function stopRecording() {
+  if (state.recorder && state.recorder.state === "recording") state.recorder.stop();
+}
+
+/* ---------- управление воспроизведением ---------- */
+function startPlaybackInternal() {
+  const text = $("text").value.trim();
+  if (!text) { log("Введите текст для озвучивания.", "warn"); return; }
+  speechSynthesis.cancel();
+  state.currentChunks = splitText(text, parseInt($("chunk").value, 10));
+  state.currentIndex  = 0;
+  state.isPlaying     = true;
+  state.isPaused      = false;
+  renderQueue();
+  updateButtons();
+  $("progressBar").style.width = "0%";
+  playChunks();
+}
+
+function pause() {
+  if (!state.isPlaying || state.isPaused) return;
+  speechSynthesis.pause();
+  state.isPaused = true;
+  updateButtons();
+  log("Пауза.");
+}
+function resume() {
+  if (!state.isPaused) return;
+  speechSynthesis.resume();
+  state.isPaused = false;
+  updateButtons();
+  log("Воспроизведение продолжено.");
+}
+function stop() {
+  speechSynthesis.cancel();
+  state.isPlaying = false;
+  state.isPaused  = false;
+  state.currentIndex = 0;
+  updateButtons();
+  $("progressBar").style.width = "0%";
+  log("Остановлено пользователем.");
+  if (state.recorder?.state === "recording") stopRecording();
+}
+
+/* ---------- обработчик «зависания» Chrome ----------
+   В Chromium-движках speechSynthesis.speak иногда зависает
+   на длинных Utterance > ~15 c. Костыль: периодически
+   pause+resume, если воспроизведение «активно но без событий».
+*/
+function keepAlive() {
+  if (state.isPlaying && !state.isPaused && speechSynthesis.speaking) {
+    // безопасный no-op цикл, не вызывает прерывания
+    speechSynthesis.pause();
+    speechSynthesis.resume();
+  }
+}
+setInterval(keepAlive, 10000);
+
+/* ---------- привязки UI ---------- */
+document.addEventListener("DOMContentLoaded", () => {
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;
+
+  $("lang").addEventListener("change", fillVoiceSelect);
+
+  for (const id of ["rate", "pitch", "vol", "chunk"]) {
+    $(id).addEventListener("input", () => {
+      const v = parseFloat($(id).value);
+      const label = { rate: "rateVal", pitch: "pitchVal", vol: "volVal", chunk: "chunkVal" }[id];
+      $(label).textContent = id === "chunk" ? v + " симв." : v.toFixed(2);
+      recomputeStats();
+    });
+  }
+  $("text").addEventListener("input", recomputeStats);
+
+  $("btnPlay").addEventListener("click", () => startPlaybackInternal());
+  $("btnPause").addEventListener("click", pause);
+  $("btnResume").addEventListener("click", resume);
+  $("btnStop").addEventListener("click", stop);
+  $("btnSave").addEventListener("click", startRecordingAndPlay);
+  $("btnClear").addEventListener("click", () => {
+    $("text").value = "";
+    recomputeStats();
+    renderQueue();
+    log("Поле очищено.");
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); startPlaybackInternal(); }
+    if (e.key === "Escape") stop();
+  });
+
+  // демонстрационный текст
+  $("text").value =
+    "Привет! Это локальное приложение для синтеза речи. " +
+    "Введите свой текст, выберите голос и нажмите «Озвучить». " +
+    "Поддерживаются пауза, остановка, регулировка скорости, тона и громкости. " +
+    "Длинные тексты автоматически разбиваются на фрагменты и проигрываются по очереди.";
+  recomputeStats();
+  updateButtons();
+});
+</script>
+</body>
+</html>
